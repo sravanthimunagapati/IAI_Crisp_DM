@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bearing RUL Dashboard — FEMTO</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:     #0f172a;
+    --bg2:    #1e293b;
+    --bg3:    #334155;
+    --border: rgba(148,163,184,0.12);
+    --text:   #f1f5f9;
+    --muted:  #94a3b8;
+    --blue:   #3b82f6;
+    --green:  #22c55e;
+    --yellow: #eab308;
+    --orange: #f97316;
+    --red:    #ef4444;
+    --font:   system-ui, -apple-system, sans-serif;
+    --mono:   'Courier New', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text);
+          font-size: 14px; min-height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    background: var(--bg2); border-bottom: 1px solid var(--border);
+    padding: 0 2rem; height: 56px; display: flex; align-items: center;
+    justify-content: space-between; position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 30px; height: 30px; background: var(--blue);
+    border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .logo-title { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+  .logo-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .header-right { display: flex; align-items: center; gap: 20px; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+    animation: blink 2s ease-in-out infinite; display: inline-block; margin-right: 6px; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+  .live-label { font-size: 12px; color: var(--green); font-weight: 600; }
+  .ts { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+  /* ── Layout ── */
+  .main { padding: 1.5rem 2rem; max-width: 1400px; margin: 0 auto; }
+  .section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+
+  /* ── KPI strip ── */
+  .kpi-row { display: grid; grid-template-columns: repeat(4,1fr);
+    gap: 12px; margin-bottom: 1.5rem; }
+  .kpi { background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px; }
+  .kpi-label { font-size: 11px; color: var(--muted); font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .kpi-val { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  /* ── Bearing cards ── */
+  .bearing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px; margin-bottom: 1.5rem; }
+  .bcard { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; cursor: pointer; transition: border-color .15s, transform .1s;
+    border-left: 4px solid transparent; }
+  .bcard:hover { transform: translateY(-1px); border-color: rgba(148,163,184,0.3); }
+  .bcard.active { box-shadow: 0 0 0 2px var(--blue); border-color: var(--blue); }
+  .bcard-header { display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 12px; }
+  .bcard-name { font-size: 15px; font-weight: 700; }
+  .bcard-cond { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stage-pill { font-size: 10px; font-weight: 700; padding: 3px 9px;
+    border-radius: 20px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .rul-big { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
+  .rul-unit { font-size: 12px; color: var(--muted); }
+  .rul-interval { font-size: 11px; color: var(--muted); font-family: var(--mono);
+    margin-top: 2px; }
+  .hi-bar-wrap { background: var(--bg3); border-radius: 3px; height: 5px;
+    margin: 10px 0 4px; overflow: hidden; }
+  .hi-bar { height: 100%; border-radius: 3px; transition: width .4s; }
+  .hi-label { display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--muted); }
+  .snapshot-tag { font-size: 10px; color: var(--muted); margin-top: 8px; }
+
+  /* ── Detail panel ── */
+  .detail-panel { background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px; margin-bottom: 1.5rem; }
+  .detail-header { display: flex; justify-content: space-between;
+    align-items: flex-start; margin-bottom: 20px; }
+  .detail-name { font-size: 20px; font-weight: 700; }
+  .detail-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  .chart-box { background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px; }
+  .chart-title { font-size: 11px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .chart-wrap { position: relative; height: 200px; }
+  .stat-list { margin-top: 0; }
+  .stat-row { display: flex; justify-content: space-between; padding: 7px 0;
+    border-bottom: 1px solid var(--border); font-size: 12px; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-key { color: var(--muted); }
+  .stat-val { font-weight: 600; font-family: var(--mono); }
+  .recommendation { background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px; margin-top: 16px; }
+  .rec-title { font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; margin-bottom: 6px; }
+  .rec-body { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+  /* ── Footer ── */
+  footer { border-top: 1px solid var(--border); padding: 14px 2rem;
+    text-align: center; font-size: 11px; color: var(--muted); }
+
+  @media (max-width: 900px) {
+    .kpi-row { grid-template-columns: repeat(2,1fr); }
+    .detail-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <circle cx="9" cy="9" r="7" stroke="white" stroke-width="2"/>
+        <circle cx="9" cy="9" r="3" fill="white"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-title">Bearing Health Monitor</div>
+      <div class="logo-sub">FEMTO / PRONOSTIA · CNN+SVR · LOBO Validated</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="live-label"><span class="live-dot"></span>Live Monitoring</span>
+    <span class="ts" id="ts">—</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- KPI strip -->
+  <div class="section-title">Fleet Overview</div>
+  <div class="kpi-row" id="kpi-row"></div>
+
+  <!-- Bearing cards -->
+  <div class="section-title">Bearing Status</div>
+  <div class="bearing-grid" id="bearing-grid"></div>
+
+  <!-- Detail panel -->
+  <div class="section-title">Selected Bearing Detail</div>
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-header">
+      <div>
+        <div class="detail-name" id="detail-name">—</div>
+        <div class="detail-sub" id="detail-sub">Select a bearing above</div>
+      </div>
+      <div id="detail-pill"></div>
+    </div>
+    <div class="detail-grid">
+      <div class="chart-box">
+        <div class="chart-title">Health Indicator Trend</div>
+        <div class="chart-wrap"><canvas id="chart-hi"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">RUL Prediction vs Actual</div>
+        <div class="chart-wrap"><canvas id="chart-rul"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">Snapshot Statistics</div>
+        <div class="stat-list" id="stat-list"></div>
+        <div class="recommendation" id="recommendation"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Model: CNN + SVR (Cheng et al. 2018) · Validation: LOBO ·
+  Dataset: FEMTO/PRONOSTIA (IEEE PHM 2012) ·
+  Hochschule Albstadt-Sigmaringen — Industrial AI Mini Project 2
+</footer>
+
+<script>
+const DATA = {"snapshots": {"B1_1": {"name": "B1_1", "win_idx": 0, "time_h": 0.0, "rul_h": 7.79, "rul_lo": 5.5, "rul_hi": 10.08, "mae": 2.29, "stage": 0, "stage_label": "Healthy", "hi": 0.099, "lifetime_h": 7.79, "condition": "fd1"}, "B1_2": {"name": "B1_2", "win_idx": 218, "time_h": 0.61, "rul_h": 1.81, "rul_lo": 1.25, "rul_hi": 2.37, "mae": 0.56, "stage": 1, "stage_label": "Early degradation", "hi": 0.345, "lifetime_h": 2.42, "condition": "fd1"}, "B2_1": {"name": "B2_1", "win_idx": 547, "time_h": 1.52, "rul_h": 1.01, "rul_lo": 0.6, "rul_hi": 1.42, "mae": 0.41, "stage": 2, "stage_label": "Advanced wear", "hi": 0.478, "lifetime_h": 2.53, "condition": "fd2"}, "B2_2": {"name": "B2_2", "win_idx": 200, "time_h": 0.56, "rul_h": 1.66, "rul_lo": 1.5, "rul_hi": 1.82, "mae": 0.16, "stage": 1, "stage_label": "Early degradation", "hi": 0.015, "lifetime_h": 2.21, "condition": "fd2"}, "B3_1": {"name": "B3_1", "win_idx": 438, "time_h": 1.22, "rul_h": 0.21, "rul_lo": 0, "rul_hi": 0.49, "mae": 0.28, "stage": 3, "stage_label": "Imminent failure", "hi": 0.011, "lifetime_h": 1.43, "condition": "fd3"}}, "hi_trends": {"B1_1": {"times": [0.0, 0.079, 0.157, 0.236, 0.314, 0.393, 0.472, 0.55, 0.629, 0.708, 0.786, 0.865, 0.943, 1.022, 1.101, 1.179, 1.258, 1.337, 1.415, 1.494, 1.572, 1.651, 1.73, 1.808, 1.887, 1.965, 2.044, 2.123, 2.201, 2.28, 2.359, 2.437, 2.516, 2.594, 2.673, 2.752, 2.83, 2.909, 2.988, 3.066, 3.145, 3.223, 3.302, 3.381, 3.459, 3.538, 3.616, 3.695, 3.774, 3.852, 3.931, 4.01, 4.088, 4.167, 4.245, 4.324, 4.403, 4.481, 4.56, 4.639, 4.717, 4.796, 4.874, 4.953, 5.032, 5.11, 5.189, 5.268, 5.346, 5.425, 5.503, 5.582, 5.661, 5.739, 5.818, 5.896, 5.975, 6.054, 6.132, 6.211, 6.29, 6.368, 6.447, 6.525, 6.604, 6.683, 6.761, 6.84, 6.919, 6.997, 7.076, 7.154, 7.233, 7.312, 7.39, 7.469, 7.547, 7.626, 7.705, 7.783], "hi": [0.0987, 0.1138, 0.0455, 0.087, 0.0382, 0.0378, 0.0354, 0.0389, 0.0371, 0.0362, 0.0336, 0.0314, 0.0304, 0.0299, 0.0221, 0.0197, 0.0182, 0.0112, 0.0137, 0.0121, 0.0097, 0.0067, 0.0061, 0.011, 0.0079, 0.004, 0.0056, 0.0071, 0.1338, 0.0106, 0.0038, 0.0013, 0.003, 0.0042, 0.0025, 0.0031, 0.0053, 0.0029, 0.0051, 0.0031, 0.0023, 0.0056, 0.0069, 0.0097, 0.0094, 0.0063, 0.014, 0.0177, 0.0135, 0.0116, 0.0194, 0.0165, 0.0468, 0.0216, 0.0229, 0.0271, 0.0336, 0.0526, 0.0353, 0.0535, 0.0285, 0.0335, 0.0452, 0.0423, 0.0363, 0.0401, 0.0388, 0.0521, 0.0579, 0.0516, 0.0565, 0.0538, 0.0686, 0.0743, 0.0647, 0.0804, 0.0766, 0.0667, 0.1329, 0.0867, 0.1191, 0.0984, 0.0988, 0.1254, 0.1153, 0.0921, 0.1992, 0.1791, 0.0779, 0.098, 0.0893, 0.0911, 0.1507, 0.0924, 0.0962, 0.1101, 0.1422, 0.2861, 0.5057, 0.9485], "snapshot_t": 0.0}, "B1_2": {"times": [0.0, 0.024, 0.049, 0.073, 0.098, 0.122, 0.146, 0.171, 0.195, 0.22, 0.244, 0.269, 0.293, 0.317, 0.342, 0.366, 0.391, 0.415, 0.439, 0.464, 0.488, 0.513, 0.537, 0.561, 0.586, 0.61, 0.635, 0.659, 0.684, 0.708, 0.732, 0.757, 0.781, 0.806, 0.83, 0.854, 0.879, 0.903, 0.928, 0.952, 0.976, 1.001, 1.025, 1.05, 1.074, 1.098, 1.123, 1.147, 1.172, 1.196, 1.221, 1.245, 1.269, 1.294, 1.318, 1.343, 1.367, 1.391, 1.416, 1.44, 1.465, 1.489, 1.513, 1.538, 1.562, 1.587, 1.611, 1.636, 1.66, 1.684, 1.709, 1.733, 1.758, 1.782, 1.806, 1.831, 1.855, 1.88, 1.904, 1.928, 1.953, 1.977, 2.002, 2.026, 2.051, 2.075, 2.099, 2.124, 2.148, 2.173, 2.197, 2.221, 2.246, 2.27, 2.295, 2.319, 2.343, 2.368, 2.392, 2.417], "hi": [0.5102, 0.4933, 0.4491, 0.4081, 0.4012, 0.4034, 0.4099, 0.3948, 0.3885, 0.4043, 0.4011, 0.3971, 0.4026, 0.3834, 0.3621, 0.3516, 0.345, 0.3182, 0.3283, 0.3337, 0.3612, 0.3636, 0.3444, 0.3367, 0.3516, 0.3447, 0.3061, 0.2463, 0.269, 0.3492, 0.2682, 0.2805, 0.319, 0.2785, 0.2958, 0.3042, 0.3337, 0.3382, 0.3141, 0.3344, 0.3335, 0.2989, 0.262, 0.2659, 0.2664, 0.3027, 0.3126, 0.2731, 0.2622, 0.3001, 0.3348, 0.3065, 0.2029, 0.2186, 0.2671, 0.2174, 0.2636, 0.2795, 0.2527, 0.2033, 0.1017, 0.1521, 0.022, 0.1377, 0.1545, 0.0346, 0.2345, 0.2383, 0.2867, 0.2417, 0.1872, 0.1571, 0.1034, 0.1296, 0.0608, 0.0847, 0.1884, 0.1162, 0.0761, 0.234, 0.2944, 0.2921, 0.302, 0.3301, 0.3102, 0.3053, 0.2924, 0.3339, 0.3422, 0.3342, 0.3295, 0.3383, 0.3386, 0.3355, 0.4372, 0.5865, 0.6307, 0.6984, 0.8298, 0.9757], "snapshot_t": 0.61}, "B2_1": {"times": [0.0, 0.026, 0.051, 0.077, 0.102, 0.128, 0.153, 0.179, 0.204, 0.23, 0.255, 0.281, 0.306, 0.332, 0.357, 0.383, 0.409, 0.434, 0.46, 0.485, 0.511, 0.536, 0.562, 0.587, 0.613, 0.638, 0.664, 0.689, 0.715, 0.74, 0.766, 0.792, 0.817, 0.843, 0.868, 0.894, 0.919, 0.945, 0.97, 0.996, 1.021, 1.047, 1.072, 1.098, 1.123, 1.149, 1.175, 1.2, 1.226, 1.251, 1.277, 1.302, 1.328, 1.353, 1.379, 1.404, 1.43, 1.455, 1.481, 1.506, 1.532, 1.558, 1.583, 1.609, 1.634, 1.66, 1.685, 1.711, 1.736, 1.762, 1.787, 1.813, 1.838, 1.864, 1.889, 1.915, 1.941, 1.966, 1.992, 2.017, 2.043, 2.068, 2.094, 2.119, 2.145, 2.17, 2.196, 2.221, 2.247, 2.272, 2.298, 2.324, 2.349, 2.375, 2.4, 2.426, 2.451, 2.477, 2.502, 2.528], "hi": [0.6154, 0.6052, 0.6107, 0.6202, 0.6258, 0.631, 0.616, 0.5616, 0.5394, 0.5486, 0.5518, 0.5461, 0.5369, 0.5329, 0.5349, 0.534, 0.5334, 0.5334, 0.5334, 0.5337, 0.5356, 0.5345, 0.5359, 0.5334, 0.5336, 0.5315, 0.5296, 0.529, 0.5247, 0.5193, 0.5231, 0.526, 0.5184, 0.5078, 0.5097, 0.5093, 0.5066, 0.5071, 0.5024, 0.5023, 0.5055, 0.5022, 0.505, 0.5033, 0.5034, 0.5018, 0.4998, 0.5041, 0.5046, 0.5025, 0.4987, 0.498, 0.4986, 0.4964, 0.4933, 0.4704, 0.4704, 0.4887, 0.4986, 0.4895, 0.4819, 0.4912, 0.4926, 0.4448, 0.4445, 0.444, 0.4287, 0.422, 0.3698, 0.3585, 0.3525, 0.4085, 0.4736, 0.4466, 0.4769, 0.4791, 0.4568, 0.4576, 0.4752, 0.4622, 0.4494, 0.4493, 0.4343, 0.4265, 0.4405, 0.4301, 0.4662, 0.4723, 0.4579, 0.4217, 0.4167, 0.2561, 0.0402, 0.1776, 0.3912, 0.4567, 0.5909, 0.6709, 0.8636, 0.9906], "snapshot_t": 1.52}, "B2_2": {"times": [0.0, 0.022, 0.045, 0.067, 0.089, 0.112, 0.134, 0.156, 0.179, 0.201, 0.223, 0.246, 0.268, 0.29, 0.313, 0.335, 0.357, 0.38, 0.402, 0.424, 0.447, 0.469, 0.491, 0.514, 0.536, 0.558, 0.581, 0.603, 0.625, 0.648, 0.67, 0.692, 0.715, 0.737, 0.759, 0.782, 0.804, 0.826, 0.849, 0.871, 0.893, 0.916, 0.938, 0.96, 0.983, 1.005, 1.027, 1.05, 1.072, 1.094, 1.117, 1.139, 1.161, 1.184, 1.206, 1.228, 1.251, 1.273, 1.295, 1.318, 1.34, 1.362, 1.385, 1.407, 1.429, 1.452, 1.474, 1.496, 1.519, 1.541, 1.563, 1.586, 1.608, 1.63, 1.653, 1.675, 1.697, 1.72, 1.742, 1.764, 1.787, 1.809, 1.831, 1.854, 1.876, 1.898, 1.921, 1.943, 1.965, 1.988, 2.01, 2.032, 2.055, 2.077, 2.099, 2.122, 2.144, 2.166, 2.189, 2.211], "hi": [0.0265, 0.0346, 0.0434, 0.0517, 0.0543, 0.0544, 0.0542, 0.0513, 0.0484, 0.0488, 0.0447, 0.0436, 0.0447, 0.0385, 0.0351, 0.0395, 0.038, 0.0314, 0.0302, 0.0287, 0.0213, 0.0192, 0.0204, 0.02, 0.0155, 0.0156, 0.0238, 0.0243, 0.0237, 0.0201, 0.0187, 0.0181, 0.0151, 0.0168, 0.0167, 0.0192, 0.0234, 0.0291, 0.0255, 0.0232, 0.024, 0.0163, 0.0213, 0.0201, 0.0142, 0.0236, 0.0327, 0.0379, 0.0366, 0.0239, 0.0215, 0.0286, 0.0419, 0.0676, 0.0714, 0.0625, 0.0604, 0.0451, 0.045, 0.0612, 0.0541, 0.0668, 0.1277, 0.1464, 0.0861, 0.0503, 0.0391, 0.0574, 0.0529, 0.0274, 0.0318, 0.0384, 0.0293, 0.0308, 0.0306, 0.0326, 0.0425, 0.0381, 0.0269, 0.01, 0.0009, 0.0113, 0.0184, 0.0279, 0.0243, 0.0111, 0.0121, 0.0244, 0.03, 0.0541, 0.0883, 0.0314, 0.022, 0.1489, 0.3427, 0.414, 0.4355, 0.5023, 0.757, 0.9343], "snapshot_t": 0.56}, "B3_1": {"times": [0.0, 0.014, 0.029, 0.043, 0.058, 0.072, 0.087, 0.101, 0.115, 0.13, 0.144, 0.159, 0.173, 0.187, 0.202, 0.216, 0.231, 0.245, 0.26, 0.274, 0.288, 0.303, 0.317, 0.332, 0.346, 0.361, 0.375, 0.389, 0.404, 0.418, 0.433, 0.447, 0.462, 0.476, 0.49, 0.505, 0.519, 0.534, 0.548, 0.562, 0.577, 0.591, 0.606, 0.62, 0.635, 0.649, 0.663, 0.678, 0.692, 0.707, 0.721, 0.736, 0.75, 0.764, 0.779, 0.793, 0.808, 0.822, 0.836, 0.851, 0.865, 0.88, 0.894, 0.909, 0.923, 0.937, 0.952, 0.966, 0.981, 0.995, 1.01, 1.024, 1.038, 1.053, 1.067, 1.082, 1.096, 1.11, 1.125, 1.139, 1.154, 1.168, 1.183, 1.197, 1.211, 1.226, 1.24, 1.255, 1.269, 1.284, 1.298, 1.312, 1.327, 1.341, 1.356, 1.37, 1.385, 1.399, 1.413, 1.428], "hi": [0.227, 0.2287, 0.2414, 0.2463, 0.2429, 0.2286, 0.2151, 0.2095, 0.1942, 0.16, 0.1189, 0.0779, 0.0659, 0.0677, 0.07, 0.0699, 0.0674, 0.0667, 0.063, 0.0581, 0.054, 0.0534, 0.0556, 0.0569, 0.0563, 0.0533, 0.0549, 0.0551, 0.0556, 0.051, 0.0515, 0.0464, 0.0437, 0.0429, 0.0458, 0.0484, 0.0467, 0.047, 0.0466, 0.0452, 0.0428, 0.0413, 0.0402, 0.0416, 0.0415, 0.0445, 0.0446, 0.0433, 0.041, 0.0397, 0.043, 0.0444, 0.0441, 0.0416, 0.0404, 0.0442, 0.0471, 0.0475, 0.0425, 0.0387, 0.0387, 0.0379, 0.0378, 0.0392, 0.0374, 0.0402, 0.0385, 0.0403, 0.0388, 0.0403, 0.0372, 0.0322, 0.0274, 0.0289, 0.0286, 0.0256, 0.0228, 0.0225, 0.0213, 0.0185, 0.016, 0.0152, 0.0118, 0.0119, 0.0111, 0.0104, 0.0099, 0.0099, 0.0089, 0.0039, 0.0018, 0.0007, 0.0026, 0.1468, 0.7386, 0.884, 0.7891, 0.4433, 0.4393, 0.4309], "snapshot_t": 1.22}}, "rul_trends": {"B1_1": {"times": [0.0, 0.078, 0.156, 0.233, 0.314, 0.392, 0.469, 0.55, 0.628, 0.706, 0.786, 0.864, 0.942, 1.019, 1.1, 1.178, 1.256, 1.336, 1.414, 1.492, 1.572, 1.65, 1.728, 1.806, 1.886, 1.964, 2.042, 2.122, 2.2, 2.278, 2.358, 2.436, 2.514, 2.594, 2.672, 2.75, 2.828, 2.908, 2.986, 3.064, 3.144, 3.222, 3.3, 3.381, 3.458, 3.536, 3.614, 3.694, 3.772, 3.85, 3.931, 4.008, 4.086, 4.167, 4.244, 4.322, 4.4, 4.481, 4.558, 4.636, 4.717, 4.794, 4.872, 4.953, 5.031, 5.108, 5.189, 5.267, 5.344, 5.422, 5.503, 5.581, 5.658, 5.739, 5.817, 5.894, 5.975, 6.053, 6.131, 6.208, 6.289, 6.367, 6.444, 6.525, 6.603, 6.681, 6.761, 6.839, 6.917, 6.994, 7.075, 7.153, 7.231, 7.311, 7.389, 7.467, 7.547, 7.625, 7.703, 7.783], "true_h": [7.786, 7.708, 7.631, 7.553, 7.472, 7.394, 7.317, 7.236, 7.158, 7.081, 7.0, 6.922, 6.844, 6.767, 6.686, 6.608, 6.531, 6.45, 6.372, 6.294, 6.214, 6.136, 6.058, 5.981, 5.9, 5.822, 5.744, 5.664, 5.586, 5.508, 5.428, 5.35, 5.272, 5.192, 5.114, 5.036, 4.958, 4.878, 4.8, 4.722, 4.642, 4.564, 4.486, 4.406, 4.328, 4.25, 4.172, 4.092, 4.014, 3.936, 3.856, 3.778, 3.7, 3.619, 3.542, 3.464, 3.386, 3.306, 3.228, 3.15, 3.069, 2.992, 2.914, 2.833, 2.756, 2.678, 2.597, 2.519, 2.442, 2.364, 2.283, 2.206, 2.128, 2.047, 1.969, 1.892, 1.811, 1.733, 1.656, 1.578, 1.497, 1.419, 1.342, 1.261, 1.183, 1.106, 1.025, 0.947, 0.869, 0.792, 0.711, 0.633, 0.556, 0.475, 0.397, 0.319, 0.239, 0.161, 0.083, 0.003], "pred_h": [7.562, 7.47, 7.553, 7.5, 6.989, 6.939, 7.052, 6.955, 6.939, 6.599, 6.422, 6.104, 5.913, 4.458, 2.055, 1.33, 1.39, 1.002, 0.694, 0.813, 0.712, 0.71, 0.694, 0.802, 0.75, 0.815, 0.81, 0.8, 0.959, 1.054, 1.184, 1.242, 1.26, 1.265, 1.228, 1.17, 1.159, 1.147, 1.329, 1.123, 1.339, 1.194, 1.157, 1.171, 1.215, 1.21, 0.996, 1.05, 1.188, 1.37, 1.534, 1.448, 1.686, 1.666, 1.837, 1.938, 1.777, 2.108, 2.034, 2.076, 2.065, 2.152, 2.276, 2.215, 2.257, 2.362, 2.441, 2.5, 2.389, 2.622, 2.546, 2.504, 2.629, 2.623, 2.655, 2.749, 2.818, 2.823, 2.817, 2.813, 2.74, 2.783, 2.842, 2.907, 2.857, 2.964, 2.865, 2.743, 2.756, 2.697, 2.47, 2.559, 2.718, 2.559, 2.815, 2.757, 2.799, 2.698, 3.028, 3.11]}, "B1_2": {"times": [0.0, 0.022, 0.047, 0.072, 0.097, 0.119, 0.144, 0.169, 0.194, 0.219, 0.242, 0.267, 0.292, 0.317, 0.342, 0.364, 0.389, 0.414, 0.439, 0.461, 0.486, 0.511, 0.536, 0.561, 0.583, 0.608, 0.633, 0.658, 0.683, 0.706, 0.731, 0.756, 0.781, 0.806, 0.828, 0.853, 0.878, 0.903, 0.925, 0.95, 0.975, 1.0, 1.025, 1.047, 1.072, 1.097, 1.122, 1.147, 1.169, 1.194, 1.219, 1.244, 1.267, 1.292, 1.317, 1.342, 1.367, 1.389, 1.414, 1.439, 1.464, 1.489, 1.511, 1.536, 1.561, 1.586, 1.611, 1.633, 1.658, 1.683, 1.708, 1.731, 1.756, 1.781, 1.806, 1.831, 1.853, 1.878, 1.903, 1.928, 1.953, 1.975, 2.0, 2.025, 2.05, 2.072, 2.097, 2.122, 2.147, 2.172, 2.194, 2.219, 2.244, 2.269, 2.294, 2.317, 2.342, 2.367, 2.392, 2.417], "true_h": [2.419, 2.397, 2.372, 2.347, 2.322, 2.3, 2.275, 2.25, 2.225, 2.2, 2.178, 2.153, 2.128, 2.103, 2.078, 2.056, 2.031, 2.006, 1.981, 1.958, 1.933, 1.908, 1.883, 1.858, 1.836, 1.811, 1.786, 1.761, 1.736, 1.714, 1.689, 1.664, 1.639, 1.614, 1.592, 1.567, 1.542, 1.517, 1.494, 1.469, 1.444, 1.419, 1.394, 1.372, 1.347, 1.322, 1.297, 1.272, 1.25, 1.225, 1.2, 1.175, 1.153, 1.128, 1.103, 1.078, 1.053, 1.031, 1.006, 0.981, 0.956, 0.931, 0.908, 0.883, 0.858, 0.833, 0.808, 0.786, 0.761, 0.736, 0.711, 0.689, 0.664, 0.639, 0.614, 0.589, 0.567, 0.542, 0.517, 0.492, 0.467, 0.444, 0.419, 0.394, 0.369, 0.347, 0.322, 0.297, 0.272, 0.247, 0.225, 0.2, 0.175, 0.15, 0.125, 0.103, 0.078, 0.053, 0.028, 0.003], "pred_h": [2.341, 2.23, 1.874, 1.694, 1.718, 1.658, 1.559, 1.375, 1.366, 1.392, 1.365, 1.366, 1.556, 1.45, 1.123, 1.291, 1.441, 1.345, 1.261, 1.387, 1.426, 1.503, 1.54, 1.561, 1.569, 1.514, 1.398, 1.307, 1.359, 1.503, 1.484, 1.596, 1.534, 1.675, 1.698, 1.629, 1.571, 1.718, 1.63, 1.588, 1.578, 1.508, 1.557, 1.66, 1.634, 1.735, 1.612, 1.572, 1.523, 1.591, 1.675, 1.654, 1.433, 1.429, 1.571, 1.561, 1.569, 1.55, 1.536, 1.417, 1.127, 1.333, 1.261, 1.479, 1.489, 1.504, 1.743, 1.643, 1.671, 1.652, 1.62, 1.464, 1.339, 1.347, 1.284, 1.306, 1.441, 1.463, 1.354, 1.457, 1.647, 1.583, 1.322, 1.448, 1.391, 1.337, 1.304, 1.342, 1.251, 1.232, 1.276, 1.276, 1.252, 1.19, 0.649, 0.217, 0.232, 0.251, 0.277, 0.395]}, "B2_1": {"times": [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.153, 0.178, 0.203, 0.228, 0.253, 0.281, 0.306, 0.331, 0.356, 0.381, 0.408, 0.433, 0.458, 0.483, 0.508, 0.536, 0.561, 0.586, 0.611, 0.636, 0.661, 0.689, 0.714, 0.739, 0.764, 0.789, 0.817, 0.842, 0.867, 0.892, 0.917, 0.944, 0.969, 0.994, 1.019, 1.044, 1.072, 1.097, 1.122, 1.147, 1.172, 1.2, 1.225, 1.25, 1.275, 1.3, 1.325, 1.353, 1.378, 1.403, 1.428, 1.453, 1.481, 1.506, 1.531, 1.556, 1.581, 1.608, 1.633, 1.658, 1.683, 1.708, 1.736, 1.761, 1.786, 1.811, 1.836, 1.864, 1.889, 1.914, 1.939, 1.964, 1.989, 2.017, 2.042, 2.067, 2.092, 2.117, 2.144, 2.169, 2.194, 2.219, 2.244, 2.272, 2.297, 2.322, 2.347, 2.372, 2.4, 2.425, 2.45, 2.475, 2.5, 2.528], "true_h": [2.531, 2.506, 2.481, 2.456, 2.431, 2.406, 2.378, 2.353, 2.328, 2.303, 2.278, 2.25, 2.225, 2.2, 2.175, 2.15, 2.122, 2.097, 2.072, 2.047, 2.022, 1.994, 1.969, 1.944, 1.919, 1.894, 1.869, 1.842, 1.817, 1.792, 1.767, 1.742, 1.714, 1.689, 1.664, 1.639, 1.614, 1.586, 1.561, 1.536, 1.511, 1.486, 1.458, 1.433, 1.408, 1.383, 1.358, 1.331, 1.306, 1.281, 1.256, 1.231, 1.206, 1.178, 1.153, 1.128, 1.103, 1.078, 1.05, 1.025, 1.0, 0.975, 0.95, 0.922, 0.897, 0.872, 0.847, 0.822, 0.794, 0.769, 0.744, 0.719, 0.694, 0.667, 0.642, 0.617, 0.592, 0.567, 0.542, 0.514, 0.489, 0.464, 0.439, 0.414, 0.386, 0.361, 0.336, 0.311, 0.286, 0.258, 0.233, 0.208, 0.183, 0.158, 0.131, 0.106, 0.081, 0.056, 0.031, 0.003], "pred_h": [2.373, 2.266, 2.256, 2.331, 2.339, 2.359, 2.356, 2.445, 2.48, 2.38, 2.289, 2.199, 2.166, 2.14, 2.092, 1.953, 1.571, 1.272, 1.164, 1.155, 1.061, 1.083, 1.085, 0.992, 1.099, 0.996, 0.938, 1.044, 0.928, 0.851, 1.04, 1.075, 0.975, 0.957, 0.986, 0.945, 0.949, 0.978, 0.918, 0.868, 0.856, 0.892, 0.872, 0.843, 0.824, 0.788, 0.767, 0.807, 0.872, 0.813, 0.764, 0.82, 0.834, 0.829, 0.806, 0.782, 0.816, 0.822, 0.902, 0.907, 0.838, 0.856, 0.809, 0.751, 0.799, 0.834, 0.799, 0.759, 0.753, 0.757, 0.72, 0.71, 0.667, 0.68, 0.702, 0.721, 0.718, 0.737, 0.759, 0.759, 0.752, 0.822, 0.803, 0.752, 0.723, 0.801, 0.798, 0.816, 0.8, 0.734, 0.76, 0.733, 0.792, 0.817, 0.851, 0.739, 0.649, 0.492, 0.372, 0.531]}, "B2_2": {"times": [0.0, 0.022, 0.044, 0.067, 0.089, 0.111, 0.133, 0.156, 0.178, 0.2, 0.222, 0.244, 0.267, 0.289, 0.311, 0.333, 0.356, 0.378, 0.4, 0.422, 0.444, 0.467, 0.489, 0.511, 0.533, 0.558, 0.581, 0.603, 0.625, 0.647, 0.669, 0.692, 0.714, 0.736, 0.758, 0.781, 0.803, 0.825, 0.847, 0.869, 0.892, 0.914, 0.936, 0.958, 0.981, 1.003, 1.025, 1.047, 1.069, 1.092, 1.117, 1.139, 1.161, 1.183, 1.206, 1.228, 1.25, 1.272, 1.294, 1.317, 1.339, 1.361, 1.383, 1.406, 1.428, 1.45, 1.472, 1.494, 1.517, 1.539, 1.561, 1.583, 1.606, 1.628, 1.65, 1.675, 1.697, 1.719, 1.742, 1.764, 1.786, 1.808, 1.831, 1.853, 1.875, 1.897, 1.919, 1.942, 1.964, 1.986, 2.008, 2.031, 2.053, 2.075, 2.097, 2.119, 2.142, 2.164, 2.186, 2.211], "true_h": [2.214, 2.192, 2.169, 2.147, 2.125, 2.103, 2.081, 2.058, 2.036, 2.014, 1.992, 1.969, 1.947, 1.925, 1.903, 1.881, 1.858, 1.836, 1.814, 1.792, 1.769, 1.747, 1.725, 1.703, 1.681, 1.656, 1.633, 1.611, 1.589, 1.567, 1.544, 1.522, 1.5, 1.478, 1.456, 1.433, 1.411, 1.389, 1.367, 1.344, 1.322, 1.3, 1.278, 1.256, 1.233, 1.211, 1.189, 1.167, 1.144, 1.122, 1.097, 1.075, 1.053, 1.031, 1.008, 0.986, 0.964, 0.942, 0.919, 0.897, 0.875, 0.853, 0.831, 0.808, 0.786, 0.764, 0.742, 0.719, 0.697, 0.675, 0.653, 0.631, 0.608, 0.586, 0.564, 0.539, 0.517, 0.494, 0.472, 0.45, 0.428, 0.406, 0.383, 0.361, 0.339, 0.317, 0.294, 0.272, 0.25, 0.228, 0.206, 0.183, 0.161, 0.139, 0.117, 0.094, 0.072, 0.05, 0.028, 0.003], "pred_h": [1.88, 1.948, 2.001, 2.005, 2.012, 2.018, 2.021, 2.013, 2.012, 2.018, 2.009, 2.001, 1.996, 1.975, 1.97, 1.967, 1.97, 1.969, 1.968, 1.97, 1.957, 1.953, 1.952, 1.923, 1.836, 1.779, 1.791, 1.72, 1.578, 1.505, 1.33, 1.211, 1.299, 1.416, 1.327, 1.272, 1.257, 1.197, 1.185, 1.182, 1.262, 1.215, 1.217, 1.268, 1.166, 1.232, 1.317, 1.244, 1.259, 1.227, 1.096, 0.874, 0.886, 1.069, 1.045, 1.155, 1.258, 1.249, 1.224, 1.208, 1.21, 1.245, 1.167, 1.059, 0.997, 0.949, 0.88, 0.771, 0.677, 0.612, 0.518, 0.509, 0.504, 0.471, 0.462, 0.401, 0.363, 0.299, 0.306, 0.284, 0.276, 0.279, 0.259, 0.276, 0.253, 0.193, 0.193, 0.245, 0.275, 0.24, 0.255, 0.237, 0.428, 0.813, 0.925, 0.892, 0.89, 0.507, 0.187, 0.211]}, "B3_1": {"times": [0.0, 0.014, 0.028, 0.042, 0.056, 0.069, 0.086, 0.1, 0.114, 0.128, 0.142, 0.158, 0.172, 0.186, 0.2, 0.214, 0.231, 0.244, 0.258, 0.272, 0.286, 0.303, 0.317, 0.331, 0.344, 0.358, 0.372, 0.389, 0.403, 0.417, 0.431, 0.444, 0.461, 0.475, 0.489, 0.503, 0.517, 0.533, 0.547, 0.561, 0.575, 0.589, 0.606, 0.619, 0.633, 0.647, 0.661, 0.678, 0.692, 0.706, 0.719, 0.733, 0.747, 0.764, 0.778, 0.792, 0.806, 0.819, 0.836, 0.85, 0.864, 0.878, 0.892, 0.908, 0.922, 0.936, 0.95, 0.964, 0.981, 0.994, 1.008, 1.022, 1.036, 1.053, 1.067, 1.081, 1.094, 1.108, 1.122, 1.139, 1.153, 1.167, 1.181, 1.194, 1.211, 1.225, 1.239, 1.253, 1.267, 1.283, 1.297, 1.311, 1.325, 1.339, 1.356, 1.369, 1.383, 1.397, 1.411, 1.428], "true_h": [1.431, 1.417, 1.403, 1.389, 1.375, 1.361, 1.344, 1.331, 1.317, 1.303, 1.289, 1.272, 1.258, 1.244, 1.231, 1.217, 1.2, 1.186, 1.172, 1.158, 1.144, 1.128, 1.114, 1.1, 1.086, 1.072, 1.058, 1.042, 1.028, 1.014, 1.0, 0.986, 0.969, 0.956, 0.942, 0.928, 0.914, 0.897, 0.883, 0.869, 0.856, 0.842, 0.825, 0.811, 0.797, 0.783, 0.769, 0.753, 0.739, 0.725, 0.711, 0.697, 0.683, 0.667, 0.653, 0.639, 0.625, 0.611, 0.594, 0.581, 0.567, 0.553, 0.539, 0.522, 0.508, 0.494, 0.481, 0.467, 0.45, 0.436, 0.422, 0.408, 0.394, 0.378, 0.364, 0.35, 0.336, 0.322, 0.308, 0.292, 0.278, 0.264, 0.25, 0.236, 0.219, 0.206, 0.192, 0.178, 0.164, 0.147, 0.133, 0.119, 0.106, 0.092, 0.075, 0.061, 0.047, 0.033, 0.019, 0.003], "pred_h": [1.165, 1.18, 1.152, 1.085, 1.072, 1.066, 1.141, 1.158, 1.148, 1.154, 1.178, 1.202, 1.156, 1.056, 0.983, 0.953, 0.94, 0.928, 0.956, 0.994, 1.008, 1.007, 0.956, 0.908, 0.918, 0.958, 0.928, 0.882, 0.802, 0.864, 0.877, 0.925, 0.88, 0.852, 0.809, 0.793, 0.853, 0.8, 0.771, 0.741, 0.782, 0.826, 0.822, 0.812, 0.789, 0.75, 0.717, 0.707, 0.654, 0.702, 0.68, 0.709, 0.672, 0.722, 0.732, 0.696, 0.67, 0.695, 0.705, 0.709, 0.685, 0.705, 0.686, 0.708, 0.733, 0.704, 0.686, 0.634, 0.628, 0.667, 0.714, 0.806, 0.849, 0.847, 0.829, 0.832, 0.852, 0.852, 0.895, 0.924, 0.993, 0.993, 0.981, 0.98, 1.019, 1.061, 1.079, 1.075, 1.074, 1.077, 1.073, 1.081, 1.078, 1.034, 0.745, 0.418, 0.144, 0.019, 0.006, 0.004]}}, "labels": ["Healthy", "Early degradation", "Advanced wear", "Imminent failure"], "colours": ["#22c55e", "#eab308", "#f97316", "#ef4444"]};
+
+const STAGE_COLOURS = DATA.colours;
+const STAGE_LABELS  = DATA.labels;
+const STAGE_BG      = ["rgba(34,197,94,0.15)","rgba(234,179,8,0.15)",
+                        "rgba(249,115,22,0.15)","rgba(239,68,68,0.15)"];
+const COND_LABELS   = { fd1:"1800 rpm / 4000 N", fd2:"1650 rpm / 4200 N", fd3:"1500 rpm / 5000 N" };
+const RECOMMENDATIONS = [
+  { title:"No Action Required",    body:"Bearing is in normal operating condition. Continue scheduled monitoring." },
+  { title:"Schedule Inspection",   body:"Early wear signatures detected. Plan a visual inspection within 48 hours." },
+  { title:"Plan Replacement",      body:"Significant degradation detected. Schedule bearing replacement within 8 hours." },
+  { title:"Replace Immediately",   body:"Imminent failure risk. Stop the machine and replace this bearing now." },
+];
+
+let selectedBearing = Object.keys(DATA.snapshots)[0];
+let hiChart = null, rulChart = null;
+
+// ── KPI strip ────────────────────────────────────────────────────────────────
+function buildKpis() {
+  const snaps = Object.values(DATA.snapshots);
+  const counts = [0,0,0,0];
+  snaps.forEach(s => counts[s.stage]++);
+  const kpis = [
+    { label:"Total Bearings", val: snaps.length, sub:"monitored", colour:"#3b82f6" },
+    { label:"Healthy",        val: counts[0],    sub:"no action needed", colour:"#22c55e" },
+    { label:"Degrading",      val: counts[1]+counts[2], sub:"plan maintenance", colour:"#f97316" },
+    { label:"Critical",       val: counts[3],    sub:"act immediately", colour:"#ef4444" },
+  ];
+  document.getElementById("kpi-row").innerHTML = kpis.map(k => `
+    <div class="kpi">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-val" style="color:${k.colour}">${k.val}</div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>`).join("");
+}
+
+// ── Bearing cards ─────────────────────────────────────────────────────────────
+function buildCards() {
+  document.getElementById("bearing-grid").innerHTML =
+    Object.values(DATA.snapshots).map(s => {
+      const col = STAGE_COLOURS[s.stage];
+      const bg  = STAGE_BG[s.stage];
+      const pct = Math.round(s.hi * 100);
+      const active = s.name === selectedBearing ? "active" : "";
+      return `
+      <div class="bcard ${active}" style="border-left-color:${col}"
+           onclick="selectBearing('${s.name}')">
+        <div class="bcard-header">
+          <div>
+            <div class="bcard-name">${s.name}</div>
+            <div class="bcard-cond">Cond. ${s.condition.replace("fd","")} · ${COND_LABELS[s.condition]}</div>
+          </div>
+          <span class="stage-pill" style="background:${bg};color:${col}">
+            ${s.stage_label}
+          </span>
+        </div>
+        <div>
+          <span class="rul-big" style="color:${col}">${s.rul_h.toFixed(2)}</span>
+          <span class="rul-unit">h remaining</span>
+        </div>
+        <div class="rul-interval">±${s.mae.toFixed(2)}h confidence · snapshot @ ${s.time_h.toFixed(2)}h</div>
+        <div class="hi-bar-wrap">
+          <div class="hi-bar" style="width:${pct}%;background:${col}"></div>
+        </div>
+        <div class="hi-label"><span>HI</span><span>${pct}%</span></div>
+        <div class="snapshot-tag">Lifetime: ${s.lifetime_h.toFixed(2)}h · Window ${s.win_idx+1}</div>
+      </div>`;
+    }).join("");
+}
+
+// ── Detail panel ──────────────────────────────────────────────────────────────
+function buildDetail() {
+  const s   = DATA.snapshots[selectedBearing];
+  const hi  = DATA.hi_trends[selectedBearing];
+  const rul = DATA.rul_trends[selectedBearing];
+  const col = STAGE_COLOURS[s.stage];
+  const bg  = STAGE_BG[s.stage];
+  const rec = RECOMMENDATIONS[s.stage];
+
+  document.getElementById("detail-name").textContent = s.name;
+  document.getElementById("detail-sub").textContent  =
+    `Condition ${s.condition.replace("fd","")} · ${COND_LABELS[s.condition]} · Lifetime ${s.lifetime_h.toFixed(2)}h`;
+  document.getElementById("detail-pill").innerHTML =
+    `<span class="stage-pill" style="background:${bg};color:${col};font-size:13px;padding:5px 14px">
+      ${s.stage_label}</span>`;
+
+  // Stats
+  document.getElementById("stat-list").innerHTML = [
+    ["Snapshot time",    `${s.time_h.toFixed(2)} h`],
+    ["Predicted RUL",   `${s.rul_h.toFixed(2)} h`],
+    ["Confidence band", `${s.rul_lo.toFixed(2)} – ${s.rul_hi.toFixed(2)} h`],
+    ["MAE (LOBO)",      `${s.mae.toFixed(2)} h`],
+    ["Health Indicator",`${(s.hi*100).toFixed(1)}%`],
+    ["Health stage",    s.stage_label],
+  ].map(([k,v]) => `
+    <div class="stat-row">
+      <span class="stat-key">${k}</span>
+      <span class="stat-val" style="color:${col}">${v}</span>
+    </div>`).join("");
+
+  // Recommendation
+  document.getElementById("recommendation").innerHTML = `
+    <div class="rec-title" style="color:${col}">${rec.title}</div>
+    <div class="rec-body">${rec.body}</div>`;
+
+  // HI chart
+  if (hiChart) hiChart.destroy();
+  hiChart = new Chart(document.getElementById("chart-hi").getContext("2d"), {
+    type: "line",
+    data: {
+      labels: hi.times,
+      datasets: [{
+        data: hi.hi,
+        borderColor: col,
+        backgroundColor: bg,
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.3,
+      },
+      // snapshot marker
+      {
+        data: hi.times.map((t,i) => Math.abs(t - s.time_h) < (hi.times[1]-hi.times[0])*1.5 ? hi.hi[i] : null),
+        borderColor: "#ffffff",
+        backgroundColor: "#ffffff",
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        showLine: false,
+        label: "Snapshot",
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: i => `HI: ${i.raw?.toFixed(3)}` } },
+      },
+      scales: {
+        x: { ticks: { color:"#94a3b8", font:{size:10}, maxTicksLimit:6,
+               callback: v => `${parseFloat(hi.times[v]||0).toFixed(1)}h` },
+               grid: { color:"rgba(148,163,184,0.08)" } },
+        y: { min:0, max:1, ticks: { color:"#94a3b8", font:{size:10},
+               callback: v => `${(v*100).toFixed(0)}%` },
+               grid: { color:"rgba(148,163,184,0.08)" } },
+      }
+    }
+  });
+
+  // RUL chart
+  if (rulChart) rulChart.destroy();
+  rulChart = new Chart(document.getElementById("chart-rul").getContext("2d"), {
+    type: "line",
+    data: {
+      labels: rul.times,
+      datasets: [
+        {
+          label: "Actual RUL",
+          data: rul.true_h,
+          borderColor: "#3b82f6",
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+        },
+        {
+          label: "Predicted RUL",
+          data: rul.pred_h,
+          borderColor: col,
+          borderDash: [5,3],
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+        },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color:"#94a3b8", font:{size:10}, boxWidth:14 } },
+        tooltip: { callbacks: { label: i => `${i.dataset.label}: ${i.raw?.toFixed(2)}h` } },
+      },
+      scales: {
+        x: { ticks: { color:"#94a3b8", font:{size:10}, maxTicksLimit:6,
+               callback: v => `${parseFloat(rul.times[v]||0).toFixed(1)}h` },
+               grid: { color:"rgba(148,163,184,0.08)" } },
+        y: { ticks: { color:"#94a3b8", font:{size:10},
+               callback: v => `${v.toFixed(1)}h` },
+               grid: { color:"rgba(148,163,184,0.08)" }, beginAtZero: true },
+      }
+    }
+  });
+}
+
+function selectBearing(name) {
+  selectedBearing = name;
+  buildCards();
+  buildDetail();
+}
+
+// ── Timestamp ─────────────────────────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById("ts").textContent = new Date().toLocaleTimeString();
+}, 1000);
+document.getElementById("ts").textContent = new Date().toLocaleTimeString();
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+buildKpis();
+buildCards();
+buildDetail();
+</script>
+</body>
+</html>
