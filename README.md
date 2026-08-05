@@ -29,7 +29,7 @@ Industrial AI mini-projects applying structured, evaluation-driven workflows to 
 ### 3. Industrial PLC Performance Loss Detection — `B5_OEE_Performance_Loss_Detection`
 **Problem:** Identify unexplained performance losses (OEE) on a production line from raw PLC controller logs, across drilling, warehouse, and conveyor subsystems.
 
-**Approach:** Group project (3 members). Merged 11,480+ time-series records from two different PLC controller types (Siemens S7 and Beckhoff) into a unified 5,058 × 197 cycle-level feature dataset. Applied Z-score and Isolation Forest anomaly detection to flag and characterize performance-loss events, attributing each to timestamp, duration, and likely root cause. Version-controlled collaboratively via Git.
+**Approach:** Merged 11,480+ time-series records from two different PLC controller types (Siemens S7 and Beckhoff) into a unified 5,058 × 197 cycle-level feature dataset. Applied Z-score distance and Isolation Forest as complementary anomaly-scoring methods to flag and characterize performance-loss events, attributing each to timestamp, duration, and likely root cause via per-cycle feature attribution.
 
 **Results:** Five distinct performance-loss events identified with root-cause attribution across subsystems.
 
